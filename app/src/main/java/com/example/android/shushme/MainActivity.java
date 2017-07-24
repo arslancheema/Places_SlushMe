@@ -1,9 +1,9 @@
 package com.example.android.shushme;
 
 import android.Manifest;
-import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
@@ -17,6 +17,8 @@ import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 import android.view.View;
 import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.Switch;
 import android.widget.Toast;
 
 import com.example.android.shushme.provider.PlaceContract;
@@ -48,6 +50,8 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
     private RecyclerView mRecyclerView;
     private GoogleApiClient mClient;
 
+    Geofencing mGeoFencing;
+    private boolean mIsEnabled;
 
     /**
      * Called when the activity is starting
@@ -66,6 +70,25 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
         mAdapter = new PlaceListAdapter(this,null);
         mRecyclerView.setAdapter(mAdapter);
 
+        // Initialize the switch state and handle enable / disable switch change
+        Switch offSwitch = (Switch) findViewById(R.id.enable_switch);
+        mIsEnabled = getPreferences(MODE_PRIVATE).getBoolean(getString(R.string.setting_enabled),false);
+        offSwitch.setChecked(mIsEnabled);
+        offSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+                SharedPreferences.Editor editor = getPreferences(MODE_PRIVATE).edit();
+                editor.putBoolean(getString(R.string.setting_enabled), isChecked);
+                mIsEnabled = isChecked;
+                editor.commit();
+                if (isChecked) {
+                    mGeoFencing.registerAllGeofences();
+                } else {
+                    mGeoFencing.unRegisterAllGeofences();
+                }
+            }
+        });
+
         mClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
@@ -73,6 +96,8 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
                 .addApi(Places.GEO_DATA_API)
                 .enableAutoManage(this, this)
                 .build();
+
+        mGeoFencing = new Geofencing(this,mClient);
 
     }
     @Override
@@ -128,6 +153,10 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
             @Override
             public void onResult(@NonNull PlaceBuffer places) {
                 mAdapter.swapPlaces(places);
+                mGeoFencing.updateGeofenceList(places);
+                if (mIsEnabled){
+                    mGeoFencing.registerAllGeofences();
+                }
             }
         });
     }
